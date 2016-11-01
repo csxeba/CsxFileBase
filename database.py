@@ -1,6 +1,7 @@
 import os
 import pickle
 import gzip
+import multiprocessing as mp
 
 from .utilities import hashlite, hardcompare, padto
 
@@ -28,6 +29,19 @@ class Hashdb:
         hashdb = cls(root, [], [])
         hashdb.initialize()
         return hashdb
+
+    def mp_initialize(self):
+
+        print("Initializing database...")
+        print("Gathering information...", end="")
+        for path, dirs, files in os.walk(self.root):
+            self.paths += [path + "/" + file for file in files]
+        print(" Done!")
+
+        pool = mp.Pool(processes=mp.cpu_count())
+        results = pool.imap(process_one, self.paths, chunksize=200)
+
+        self.paths, self.hashes = zip(*results)
 
     def initialize(self):
         print("Initializing database...")
@@ -57,9 +71,8 @@ class Hashdb:
         N = len(self.hashes) ** 2
         k = 1
         for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
-            for j, (righthash, rightpath) in enumerate(zip(self.hashes, self.paths)):
-                if leftpath == rightpath:
-                    continue
+            for j in range(i, N):
+                righthash, rightpath = self.hashes[j], self.paths[j]
                 if lefthash == righthash:
                     if hardcompare(leftpath, rightpath):
                         if leftpath in duplicates:
@@ -75,10 +88,8 @@ class Hashdb:
             print("No duplicates found!")
             return
 
-        dupligroups = []
-        for left in sorted(list(duplicates.keys())):
-            dupligroups.append("\n".join(sorted([left] + duplicates[left])))
-        dupligroups = sorted(list(set(dupligroups)))
+        dupligroups = ["\n".join(sorted([left] + duplicates[left])
+                       for left in sorted(duplicates.keys())]
 
         print(len(dupligroups), "duplicate-groups found!")
         dupechain = "DUPLICATES IN {}\n".format(self.root)
@@ -104,3 +115,12 @@ class Hashdb:
         pickle.dump([self.hashes, self.paths], handle)
         print("Done!")
         print("Database file is @", self.dbpath)
+
+
+def _process_batch(paths):
+    hashes = [hashlite(path) for path in paths]
+    return list(zip(paths, hashes))
+
+
+def process_one(path):
+    return path, hashlite(path)
