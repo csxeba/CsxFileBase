@@ -1,10 +1,12 @@
 import os
 import sys
+from time import time
 
 from .database import Hashdb
 
 
 def check_duplicates(root=None):
+    start = time()
     args = sys.argv
     if root is None:
         if args:
@@ -17,3 +19,4 @@ def check_duplicates(root=None):
 
     db = Hashdb.create_new(root)
     db.check_duplicates()
+    print("Time elapsed: {} s".format(int(time() - start)))
