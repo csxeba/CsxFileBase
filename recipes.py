@@ -2,7 +2,7 @@ import os
 import sys
 from time import time
 
-from .database import Hashdb
+from CsxFileBase.database import Hashdb
 
 
 def check_duplicates(root=None):
@@ -10,7 +10,7 @@ def check_duplicates(root=None):
     args = sys.argv
     if root is None:
         if args:
-            root = args[0]
+            root = args[1]
         else:
             raise RuntimeError("Please supply a root directory!")
 
@@ -20,3 +20,6 @@ def check_duplicates(root=None):
     db = Hashdb.create_new(root)
     db.check_duplicates()
     print("Time elapsed: {} s".format(int(time() - start)))
+
+if __name__ == '__main__':
+    check_duplicates()
