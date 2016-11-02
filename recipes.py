@@ -22,4 +22,4 @@ def check_duplicates(root=None):
     print("Time elapsed: {} s".format(int(time() - start)))
 
 if __name__ == '__main__':
-    check_duplicates("/data/Megosztott/Média/Képek/")
+    check_duplicates()
