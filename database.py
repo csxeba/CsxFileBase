@@ -63,46 +63,51 @@ class Hashdb:
                 return False
             return True
 
+        def extract_duplicates():
+            dupe = dict()
+            N = ((len(self.hashes) ** 2) - len(self.hashes)) / 2
+            k = 1
+            for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
+                for j in range(i, N):
+                    righthash, rightpath = self.hashes[j], self.paths[j]
+                    if lefthash == righthash:
+                        if hardcompare(leftpath, rightpath):
+                            if leftpath in duplicates:
+                                dupe[leftpath].append(rightpath)
+                            else:
+                                dupe[leftpath] = [rightpath]
+                    print("\rChecking for duplicates... {}/{}".format(padto(k, len(str(N))), N), end="")
+                    k += 1
+            return dupe
+
+        def construct_output_string():
+            dchain = "DUPLICATES IN {}\n".format(self.root)
+            for left in duplicates.keys():
+                dchain += "-" * 50 + "\n"
+                dchain += "\n".join(sorted([left] + duplicates[left]))
+                dchain += "\n"
+            return dchain
+
         if not duplicate_hashes_exist():
             print("No duplicates!")
             return
 
-        duplicates = dict()
-        N = len(self.hashes) ** 2
-        k = 1
-        for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
-            for j in range(i, N):
-                righthash, rightpath = self.hashes[j], self.paths[j]
-                if lefthash == righthash:
-                    if hardcompare(leftpath, rightpath):
-                        if leftpath in duplicates:
-                            duplicates[leftpath].append(rightpath)
-                        else:
-                            duplicates[leftpath] = [rightpath]
-                print("\rChecking for duplicates... {}/{}".format(padto(k, len(str(N))), N), end="")
-                k += 1
-
+        duplicates = extract_duplicates()
         print(" Done!")
 
         if len(duplicates) == 0:
             print("No duplicates found!")
             return
+        else:
+            print(len(duplicates), "duplicate-groups found!")
 
-        dupligroups = ["\n".join(sorted([left] + duplicates[left])
-                       for left in sorted(duplicates.keys())]
-
-        print(len(dupligroups), "duplicate-groups found!")
-        dupechain = "DUPLICATES IN {}\n".format(self.root)
-        for dgroup in dupligroups:
-            dupechain += "-"*50 + "\n"
-            dupechain += dgroup + "\n"
-        print(dupechain)
+        dupechain = construct_output_string()
 
         outfl = open(self.root + "duplicates.txt", "w")
         outfl.write(dupechain)
         outfl.close()
 
-        print("Duplicates also logged to", self.root + "duplicates.txt")
+        print("Duplicate-groups dumpled to", self.root + "duplicates.txt")
 
     def dump_db(self):
         try:
