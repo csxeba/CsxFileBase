@@ -38,10 +38,25 @@ class Hashdb:
             self.paths += [path + "/" + file for file in files]
         print(" Done!")
 
-        pool = mp.Pool(processes=mp.cpu_count())
-        results = pool.imap(process_one, self.paths, chunksize=200)
+        step=100
 
-        self.paths, self.hashes = zip(*results)
+        batches = (self.paths[start:start+step] for start in range(0, len(self.paths), step))
+
+        jobs = mp.cpu_count()
+        while 1:
+            procs = [mp.Process(target=_process_batch) for _ in range(jobs)]
+            for proc in procs:
+                proc.start()
+
+        pool = mp.Pool(processes=mp.cpu_count())
+        results = pool.map(_process_batch, batches)
+
+        rs = []
+        for lst in results:
+            rs += lst
+        del results
+
+        self.paths, self.hashes = zip(*rs)
 
     def initialize(self):
         print("Initializing database...")
@@ -123,9 +138,11 @@ class Hashdb:
 
 
 def _process_batch(paths):
+    print(".", end="")
     hashes = [hashlite(path) for path in paths]
     return list(zip(paths, hashes))
 
 
 def process_one(path):
+    print("Doing", path)
     return path, hashlite(path)
