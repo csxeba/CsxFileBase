@@ -80,18 +80,22 @@ class Hashdb:
 
         def extract_duplicates():
             dupe = dict()
-            N = ((len(self.hashes) ** 2) - len(self.hashes)) / 2
+            N = len(self.hashes)
+            N2 = N ** 2
+            steps = (N2 - N) // 2
             k = 1
             for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
                 for j in range(i, N):
                     righthash, rightpath = self.hashes[j], self.paths[j]
                     if lefthash == righthash:
                         if hardcompare(leftpath, rightpath):
-                            if leftpath in duplicates:
+                            if leftpath in dupe:
                                 dupe[leftpath].append(rightpath)
                             else:
                                 dupe[leftpath] = [rightpath]
-                    print("\rChecking for duplicates... {}/{}".format(padto(k, len(str(N))), N), end="")
+                    print("\rChecking for duplicates... {}/{}"
+                          .format(padto(k, len(str(steps))), steps),
+                          end="")
                     k += 1
             return dupe
 
