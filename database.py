@@ -4,8 +4,6 @@ import gzip
 import multiprocessing as mp
 import threading as thr
 
-import time
-
 from .utilities import hashlite, hardcompare, padto
 
 
@@ -75,7 +73,8 @@ class Hashdb:
         batches = define_batches_generator()
 
         results = []
-        queue = mp.Queue()
+
+        queue = mp.SimpleQueue()
         jobs = mp.cpu_count()
         done = 0
         if verbose:
@@ -135,7 +134,6 @@ class Hashdb:
                 threads[-1].start()
             active = len(threads)
             while len(res) != active:
-                # time.sleep(0.01)
                 if verbose:
                     print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
             for r in res:
