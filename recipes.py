@@ -19,7 +19,7 @@ def check_dir_for_duplicates(root=None):
         raise RuntimeError("No such directory:", root)
 
     db = Hashdb.create_new(root)
-    db.check_duplicates()
+    db.check_duplicates(parallel=True)
     print("Time elapsed: {} s".format(int(time() - start)))
 
 if __name__ == '__main__':

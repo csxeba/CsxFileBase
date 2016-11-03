@@ -24,7 +24,7 @@ class Hashdb:
     @classmethod
     def create_new(cls, root):
         hashdb = cls(root, [], [])
-        hashdb.old_initialize()
+        hashdb.thread_initialize()
         return hashdb
 
     def mp_initialize(self):
@@ -65,7 +65,7 @@ class Hashdb:
                 procs = build_and_start_processes(cpus, batches, res)
                 while len(res) != len(procs):
                     print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
-                    time.sleep(0.01)
+                    time.sleep(0.1)
                 for r, proc in zip(res, procs):
                     proc.join()
                     output += r
@@ -150,68 +150,7 @@ class Hashdb:
         self.hashes = calc_hashes_vrb()
         print("Done!")
 
-    def check_duplicates(self):
-
-        def duplicate_hashes_exist():
-            indiv = list(set(self.hashes))
-            if len(indiv) == len(self.hashes):
-                return False
-            return True
-
-        def extract_duplicates():
-            dupe = dict()
-            N = len(self.hashes)
-            N2 = N ** 2
-            steps = (N2 - N) // 2
-            k = 1
-            for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
-                for j in range(i+1, N):
-                    righthash, rightpath = self.hashes[j], self.paths[j]
-                    if lefthash == righthash:
-                        if hardcompare(leftpath, rightpath):
-                            if leftpath in dupe:
-                                dupe[leftpath].append(rightpath)
-                            else:
-                                dupe[leftpath] = [rightpath]
-                    print("\rChecking for duplicates... {}/{}"
-                          .format(padto(k, steps), steps),
-                          end="")
-                    k += 1
-            return dupe
-
-        def construct_output_string():
-            dchain = "DUPLICATES IN {}\n".format(self.root)
-            for left in duplicates.keys():
-                dchain += "-" * 50 + "\n"
-                dchain += "\n".join(sorted([left] + duplicates[left]))
-                dchain += "\n"
-            return dchain
-
-        if not duplicate_hashes_exist():
-            print("No duplicates!")
-            return
-
-        duplicates = extract_duplicates()
-        print(" Done!")
-
-        if len(duplicates) == 0:
-            print("No duplicates found!")
-            return
-        else:
-            print(len(duplicates), "duplicate-groups found!")
-
-        dupechain = construct_output_string()
-
-        outfl = open(self.root + "duplicates.txt", "w")
-        outfl.write(dupechain)
-        outfl.close()
-
-        print("Duplicate-groups dumped to", self.root + "duplicates.txt")
-
-    def check_duplicates_alternative(self):
-        pass  # TODO: filter out individual hashes first!
-
-    def mp_check_duplicates(self):
+    def check_duplicates(self, parallel=False):
 
         def duplicate_hashes_exist():
             indiv = list(set(self.hashes))
@@ -231,6 +170,17 @@ class Hashdb:
                         k = 0
 
         def extract_duplicates():
+            dupe = dict()
+            steps = (len(self.hashes) ** 2 - len(self.hashes)) // 2
+            k = 1
+            for batch in construct_batch_generator(1):
+                k = _find_duplicates(*(batch[0] + [dupe, k]))
+            print("\rChecking for duplicates... {}/{}"
+                  .format(padto(k, steps), steps),
+                  end="")
+            return dupe
+
+        def mp_extract_duplicates():
 
             def build_processes(counter):
                 prcs = []
@@ -274,15 +224,14 @@ class Hashdb:
             print("No duplicates!")
             return
 
-        duplicates = extract_duplicates()
-        ndupes = len(duplicates)
+        duplicates = mp_extract_duplicates() if parallel else extract_duplicates()
         print(" Done!")
 
-        if ndupes == 0:
+        if len(duplicates) == 0:
             print("No duplicates found!")
             return
         else:
-            print(ndupes, "duplicate-groups found!")
+            print(len(duplicates), "duplicate-groups found!")
 
         dupechain = construct_output_string()
 
@@ -294,6 +243,18 @@ class Hashdb:
         outfl.close()
 
         print("Duplicate-groups dumped to", flname)
+
+    def check_duplicates_alternative(self):
+        indiv = list(set(self.hashes))
+        dupers = self.hashes[:]
+        for ind in indiv:
+            dupers.remove(ind)
+        duplications = []
+        for ind in indiv:
+            if ind in dupers:
+                pass
+
+        pass  # TODO: filter out individual hashes first!
 
     def save(self):
         try:
@@ -335,3 +296,4 @@ def _find_duplicates(lefthashes, leftpaths, righthashes, rightpaths, dupe, count
                     else:
                         dupe[leftpath] = [rightpath]
             counter += 1
+    return counter
