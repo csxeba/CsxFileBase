@@ -86,13 +86,13 @@ class Hashdb:
             print(" Done!")
             return sorted(pth)
 
-        def build_and_start_threads():
+        def build_and_start_threads(shared_list):
             thrds = []
             for job in range(step):
                 batch = next(batches, ...)
                 if batch is ...:
                     break
-                thrds.append(thr.Thread(target=_process_batch_thr, args=[batch, res]))
+                thrds.append(thr.Thread(target=_process_batch_thr, args=[batch, shared_list]))
                 thrds[-1].start()
             return thrds
 
@@ -109,8 +109,8 @@ class Hashdb:
         done = 0
         print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
         while len(results) != N:
-            threads = build_and_start_threads()
             res = []
+            threads = build_and_start_threads(res)
             while len(res) != len(threads):
                 print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
             for r, t in zip(res, threads):
