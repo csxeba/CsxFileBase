@@ -3,6 +3,7 @@ import pickle
 import gzip
 import multiprocessing as mp
 import threading as thr
+import time
 
 from .utilities import hashlite, hardcompare, padto
 
@@ -22,7 +23,7 @@ class Hashdb:
     @classmethod
     def create_new(cls, root):
         hashdb = cls(root, [], [])
-        hashdb.mp_initialize()
+        hashdb.old_initialize()
         return hashdb
 
     def mp_initialize(self):
@@ -63,6 +64,7 @@ class Hashdb:
                 procs = build_and_start_processes(cpus, batches, res)
                 while len(res) != len(procs):
                     print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
+                    time.sleep(0.01)
                 for r, proc in zip(res, procs):
                     proc.join()
                     output += r
