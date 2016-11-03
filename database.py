@@ -2,6 +2,7 @@ import os
 import pickle
 import gzip
 import multiprocessing as mp
+import threading as thr
 
 from .utilities import hashlite, hardcompare, padto
 
@@ -19,56 +20,131 @@ class Hashdb:
         self.paths = paths
 
     @classmethod
-    def from_existing(cls, root):
-        dbhandle = gzip.open(root + ".csxfilebase/hashes.db", "rb")
-        hashes, paths = pickle.load(dbhandle)
-        return cls(root, hashes, paths, empty=False)
-
-    @classmethod
     def create_new(cls, root):
         hashdb = cls(root, [], [])
-        hashdb.initialize()
+        hashdb.mp_initialize()
         return hashdb
 
     def mp_initialize(self):
 
-        print("Initializing database...")
-        print("Gathering information...", end="")
-        for path, dirs, files in os.walk(self.root):
-            self.paths += [path + "/" + file for file in files]
-        print(" Done!")
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for path, dirs, files in os.walk(self.root):
+                pth += [path + "/" + file for file in files]
+            print(" Done!")
+            return sorted(pth)
 
-        step=100
+        def define_batches_generator(N):
+            step = 1000
+            splitted = (self.paths[start:start + step] for start in range(0, N, step))
+            return splitted
 
-        batches = (self.paths[start:start+step] for start in range(0, len(self.paths), step))
+        def build_and_start_processes(jobs, batches, shared_list):
+            prcs = []
+            for job in range(jobs):
+                batch = next(batches, ...)
+                if batch is ...:
+                    break
+                prcs.append(mp.Process(target=_process_batch_thr, args=[batch, shared_list]))
+                prcs[-1].start()
+            return prcs
 
-        jobs = mp.cpu_count()
-        while 1:
-            procs = [mp.Process(target=_process_batch) for _ in range(jobs)]
-            for proc in procs:
-                proc.start()
+        def fill_hash_database():
+            cpus = mp.cpu_count()
+            N = len(self.paths)
+            batches = define_batches_generator(N)
 
-        pool = mp.Pool(processes=mp.cpu_count())
-        results = pool.map(_process_batch, batches)
+            output = []
+            print("\rFilling hash database... {}/{} ".format(padto(0, N), N), end="")
+            while len(output) != N:
+                res = mp.Manager().list()
+                procs = build_and_start_processes(cpus, batches, res)
+                while len(res) != len(procs):
+                    print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
+                for r, proc in zip(res, procs):
+                    proc.join()
+                    output += r
 
-        rs = []
-        for lst in results:
-            rs += lst
-        del results
+            print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
+            print(" Done!")
+            return output
 
-        self.paths, self.hashes = zip(*rs)
+        self.paths = read_paths()
+        results = sorted(fill_hash_database(), key=lambda x: x[0])
+        self.paths, self.hashes = zip(*results)
 
-    def initialize(self):
-        print("Initializing database...")
-        print("Gathering information...", end="")
-        for path, dirs, files in os.walk(self.root):
-            self.paths += [path + "/" + file for file in files]
-        self.paths.sort()
+    def thread_initialize(self):
+
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for path, dirs, files in os.walk(self.root):
+                pth += [path + "/" + file for file in files]
+            print(" Done!")
+            return sorted(pth)
+
+        def build_and_start_threads(shared_list):
+            thrds = []
+            for job in range(step):
+                batch = next(batches, ...)
+                if batch is ...:
+                    break
+                thrds.append(thr.Thread(target=_process_batch_thr, args=[batch, shared_list]))
+                thrds[-1].start()
+            return thrds
+
+        def define_batches_generator():
+            splitted = (self.paths[start:start + step] for start in range(0, N, step))
+            return splitted
+
+        self.paths = read_paths()
         N = len(self.paths)
+        step = 10
+        batches = define_batches_generator()
+
+        results = []
+        done = 0
+        print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+        while len(results) != N:
+            res = []
+            threads = build_and_start_threads(res)
+            while len(res) != len(threads):
+                print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+            for r, t in zip(res, threads):
+                results += r
+                done += len(r)
+                t.join()
+
+        print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+        assert len(results) == done, "Done: {} len(results): {}".format(done, len(results))
         print(" Done!")
-        for i, path in enumerate(self.paths):
-            self.hashes.append(hashlite(path))
-            print("\rFilling hash database... {}/{}".format(padto(i+1, len(str(N))), N), end=" ")
+        results.sort(key=lambda x: x[0])
+        self.paths, self.hashes = zip(*results)
+
+    def old_initialize(self):
+
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for p, dirs, files in os.walk(self.root):
+                pth += [p + "/" + file for file in files]
+            print(" Done!")
+            return sorted(pth)
+
+        def calc_hashes_vrb():
+            hsh = []
+            for i, path in enumerate(self.paths):
+                hsh.append(hashlite(path))
+                print("\rFilling hash database... {}/{}".format(padto(i + 1, N), N), end=" ")
+            return hsh
+
+        self.paths = read_paths()
+        N = len(self.paths)
+        self.hashes = calc_hashes_vrb()
         print("Done!")
 
     def check_duplicates(self):
@@ -95,7 +171,7 @@ class Hashdb:
                             else:
                                 dupe[leftpath] = [rightpath]
                     print("\rChecking for duplicates... {}/{}"
-                          .format(padto(k, len(str(steps))), steps),
+                          .format(padto(k, steps), steps),
                           end="")
                     k += 1
             return dupe
@@ -127,9 +203,9 @@ class Hashdb:
         outfl.write(dupechain)
         outfl.close()
 
-        print("Duplicate-groups dumpled to", self.root + "duplicates.txt")
+        print("Duplicate-groups dumped to", self.root + "duplicates.txt")
 
-    def dump_db(self):
+    def save(self):
         try:
             os.mkdir(self.root + ".csxfilebase/")
         except FileExistsError:
@@ -141,13 +217,22 @@ class Hashdb:
         print("Done!")
         print("Database file is @", self.dbpath)
 
+    @classmethod
+    def load(cls, root):
+        dbhandle = gzip.open(root + ".csxfilebase/hashes.db", "rb")
+        hashes, paths = pickle.load(dbhandle)
+        return cls(root, hashes, paths, empty=False)
 
-def _process_batch(paths):
-    print(".", end="")
+
+def _process_batch(paths, queue):
     hashes = [hashlite(path) for path in paths]
-    return list(zip(paths, hashes))
+    queue.put(list(zip(paths, hashes)))
+
+
+def _process_batch_thr(paths, results):
+    hashes = [hashlite(path) for path in paths]
+    results.append(list(zip(paths, hashes)))
 
 
 def process_one(path):
-    print("Doing", path)
     return path, hashlite(path)
