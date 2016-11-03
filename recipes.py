@@ -5,7 +5,7 @@ from time import time
 from CsxFileBase.database import Hashdb
 
 
-def check_duplicates(root=None):
+def check_dir_for_duplicates(root=None):
     start = time()
     args = sys.argv
     if root is None:
@@ -22,4 +22,4 @@ def check_duplicates(root=None):
     print("Time elapsed: {} s".format(int(time() - start)))
 
 if __name__ == '__main__':
-    check_duplicates()
+    check_dir_for_duplicates()

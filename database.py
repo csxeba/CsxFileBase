@@ -63,6 +63,7 @@ class Hashdb:
         print("Gathering information...", end="")
         for path, dirs, files in os.walk(self.root):
             self.paths += [path + "/" + file for file in files]
+        self.paths.sort()
         N = len(self.paths)
         print(" Done!")
         for i, path in enumerate(self.paths):
@@ -85,7 +86,7 @@ class Hashdb:
             steps = (N2 - N) // 2
             k = 1
             for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
-                for j in range(i, N):
+                for j in range(i+1, N):
                     righthash, rightpath = self.hashes[j], self.paths[j]
                     if lefthash == righthash:
                         if hardcompare(leftpath, rightpath):
