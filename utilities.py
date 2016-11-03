@@ -25,9 +25,10 @@ def hashhard(pth, blocksize=65536):
     return checksummer.hexdigest()
 
 
-def padto(string, padlen):
-    if not isinstance(string, str):
-        string = str(string)
-    if len(string) < padlen:
-        string = " " * (padlen - len(string)) + string
-    return string
+def padto(n, N):
+    n, N = str(n), str(N)
+    strlen = len(n)
+    padlen = len(N)
+    if strlen < padlen:
+        n = " " * (padlen - strlen) + n
+    return n

@@ -9,10 +9,11 @@ def check_dir_for_duplicates(root=None):
     start = time()
     args = sys.argv
     if root is None:
-        if args:
+        if len(args) > 1:
             root = args[1]
         else:
-            raise RuntimeError("Please supply a root directory!")
+            print("No root directory supplied! Going into debug mode...")
+            root = "E:/" if sys.platform == "win32" else "/data/Prog/Python/OldProjects/"
 
     if not os.path.exists(root):
         raise RuntimeError("No such directory:", root)

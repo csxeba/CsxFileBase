@@ -3,6 +3,8 @@ import pickle
 import gzip
 import multiprocessing as mp
 
+import time
+
 from .utilities import hashlite, hardcompare, padto
 
 
@@ -30,35 +32,54 @@ class Hashdb:
         hashdb.initialize()
         return hashdb
 
-    def mp_initialize(self):
+    def initialize(self):
 
-        print("Initializing database...")
-        print("Gathering information...", end="")
-        for path, dirs, files in os.walk(self.root):
-            self.paths += [path + "/" + file for file in files]
-        print(" Done!")
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for path, dirs, files in os.walk(self.root):
+                pth += [path + "/" + file for file in files]
+            print(" Done!")
+            return pth
 
-        step=100
+        def define_batches_generator():
+            splitted = (self.paths[start:start + step] for start in range(0, N, step))
+            return splitted
 
-        batches = (self.paths[start:start+step] for start in range(0, len(self.paths), step))
+        self.paths = read_paths()
+        N = len(self.paths)
+        step = 100
+        batches = define_batches_generator()
 
+        results = []
+        queue = mp.Queue()
         jobs = mp.cpu_count()
-        while 1:
-            procs = [mp.Process(target=_process_batch) for _ in range(jobs)]
+        done = 0
+
+        print("\rFilling hash database... {}/{}".format(padto(done, N), N), end="")
+        while len(results) != N:
+            procs = [mp.Process(target=_process_batch, args=[next(batches), queue])
+                     for _ in range(jobs)]
+            res = []
             for proc in procs:
                 proc.start()
+            while 1:
+                processed = queue.get()
+                if processed is not None:
+                    res += processed
+                    done += len(processed)
+                    print("\rFilling hash database... {}/{}".format(padto(done, N), N), end="")
+                    if len(res) // step == len(procs):
+                        results += res
+                        break
+                time.sleep(1)
+            for proc in procs:
+                proc.join()
 
-        pool = mp.Pool(processes=mp.cpu_count())
-        results = pool.map(_process_batch, batches)
+        self.paths, self.hashes = zip(*results)
 
-        rs = []
-        for lst in results:
-            rs += lst
-        del results
-
-        self.paths, self.hashes = zip(*rs)
-
-    def initialize(self):
+    def _old_initialize(self):
         print("Initializing database...")
         print("Gathering information...", end="")
         for path, dirs, files in os.walk(self.root):
@@ -68,7 +89,7 @@ class Hashdb:
         print(" Done!")
         for i, path in enumerate(self.paths):
             self.hashes.append(hashlite(path))
-            print("\rFilling hash database... {}/{}".format(padto(i+1, len(str(N))), N), end=" ")
+            print("\rFilling hash database... {}/{}".format(padto(i+1, N), N), end=" ")
         print("Done!")
 
     def check_duplicates(self):
@@ -95,7 +116,7 @@ class Hashdb:
                             else:
                                 dupe[leftpath] = [rightpath]
                     print("\rChecking for duplicates... {}/{}"
-                          .format(padto(k, len(str(steps))), steps),
+                          .format(padto(k, steps), steps),
                           end="")
                     k += 1
             return dupe
@@ -127,7 +148,7 @@ class Hashdb:
         outfl.write(dupechain)
         outfl.close()
 
-        print("Duplicate-groups dumpled to", self.root + "duplicates.txt")
+        print("Duplicate-groups dumped to", self.root + "duplicates.txt")
 
     def dump_db(self):
         try:
@@ -142,12 +163,10 @@ class Hashdb:
         print("Database file is @", self.dbpath)
 
 
-def _process_batch(paths):
-    print(".", end="")
+def _process_batch(paths, queue):
     hashes = [hashlite(path) for path in paths]
-    return list(zip(paths, hashes))
+    queue.put(list(zip(paths, hashes)))
 
 
 def process_one(path):
-    print("Doing", path)
     return path, hashlite(path)
