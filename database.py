@@ -4,6 +4,7 @@ import gzip
 import multiprocessing as mp
 import threading as thr
 import time
+import datetime
 
 from .utilities import hashlite, hardcompare, padto
 
@@ -207,6 +208,93 @@ class Hashdb:
 
         print("Duplicate-groups dumped to", self.root + "duplicates.txt")
 
+    def check_duplicates_alternative(self):
+        pass  # TODO: filter out individual hashes first!
+
+    def mp_check_duplicates(self):
+
+        def duplicate_hashes_exist():
+            indiv = list(set(self.hashes))
+            if len(indiv) == len(self.hashes):
+                return False
+            return True
+
+        def construct_batch_generator(n):
+            batch = []
+            k = 0
+            for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
+                for j, (righthash, rightpath) in enumerate(zip(self.hashes[i+1:], self.paths[i+1:])):
+                    batch.append([lefthash, leftpath, righthash, rightpath])
+                    if k == n:
+                        yield batch
+                        batch = []
+                        k = 0
+
+        def extract_duplicates():
+
+            def build_processes(counter):
+                prcs = []
+                batches = construct_batch_generator(1000)
+                for _ in range(mp.cpu_count() + 1):
+                    batch = next(batches, ...)
+                    if batch is ...:
+                        break
+                    prcs.append(mp.Process(target=_find_duplicates, args=batch + [dupe, counter]))
+                    prcs[-1].start()
+                return prcs
+
+            dupe = mp.Manager().dict()
+            steps = (len(self.hashes) ** 2 - len(self.hashes)) // 2
+            processed = 0
+            while processed != steps:
+                finished = mp.Value("i", 0)
+                procs = build_processes(finished)
+                while finished != len(procs):
+                    print("\rChecking for duplicates... {}/{}"
+                          .format(padto(processed, steps), steps),
+                          end="")
+                processed += finished
+                for proc in procs:
+                    proc.join()
+
+            print("\rChecking for duplicates... {}/{}"
+                  .format(padto(processed, steps), steps),
+                  end="")
+            return dupe
+
+        def construct_output_string():
+            dchain = "DUPLICATES IN {}\n".format(self.root)
+            for left in duplicates.keys():
+                dchain += "-" * 50 + "\n"
+                dchain += "\n".join(sorted([left] + duplicates[left]))
+                dchain += "\n"
+            return dchain
+
+        if not duplicate_hashes_exist():
+            print("No duplicates!")
+            return
+
+        duplicates = extract_duplicates()
+        ndupes = len(duplicates)
+        print(" Done!")
+
+        if ndupes == 0:
+            print("No duplicates found!")
+            return
+        else:
+            print(ndupes, "duplicate-groups found!")
+
+        dupechain = construct_output_string()
+
+        flname = self.root
+        flname += "_" + datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+        flname += "_" + "duplicates.txt"
+        outfl = open(flname, "w")
+        outfl.write(dupechain)
+        outfl.close()
+
+        print("Duplicate-groups dumped to", flname)
+
     def save(self):
         try:
             os.mkdir(self.root + ".csxfilebase/")
@@ -236,5 +324,14 @@ def _process_batch_thr(paths, results):
     results.append(list(zip(paths, hashes)))
 
 
-def process_one(path):
-    return path, hashlite(path)
+def _find_duplicates(lefthashes, leftpaths, righthashes, rightpaths, dupe, counter):
+    for lefthash, leftpath in zip(lefthashes, leftpaths):
+        for righthash, rightpath in zip(righthashes, rightpaths):
+            righthash, rightpath = righthash, rightpath
+            if lefthash == righthash:
+                if hardcompare(leftpath, rightpath):
+                    if leftpath in dupe:
+                        dupe[leftpath].append(rightpath)
+                    else:
+                        dupe[leftpath] = [rightpath]
+            counter += 1
