@@ -2,6 +2,7 @@ import os
 import pickle
 import gzip
 import multiprocessing as mp
+import threading as thr
 
 import time
 
@@ -32,7 +33,7 @@ class Hashdb:
         hashdb.initialize()
         return hashdb
 
-    def initialize(self):
+    def initialize(self, verbose=1):
 
         def read_paths():
             pth = []
@@ -41,7 +42,74 @@ class Hashdb:
             for path, dirs, files in os.walk(self.root):
                 pth += [path + "/" + file for file in files]
             print(" Done!")
-            return pth
+            return sorted(pth)
+
+        def define_batches_generator():
+            splitted = (self.paths[start:start + step] for start in range(0, N, step))
+            return splitted
+
+        def build_and_start_processes():
+            prcs = []
+            for job in range(jobs):
+                try:
+                    batch = next(batches)
+                except StopIteration:
+                    break
+                else:
+                    prcs.append(mp.Process(target=_process_batch, args=[batch, queue]))
+                    prcs[-1].start()
+            return prcs
+
+        def extract_results_from_queue(counter):
+            processed = queue.get()
+            if processed is not None:
+                res.append(processed)
+                counter += len(processed)
+            else:
+                print(".", end="")
+            return counter
+
+        self.paths = read_paths()
+        N = len(self.paths)
+        step = 1000
+        batches = define_batches_generator()
+
+        results = []
+        queue = mp.Queue()
+        jobs = mp.cpu_count()
+        done = 0
+        if verbose:
+            print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+        while done != N:
+            procs = build_and_start_processes()
+            res = []
+            while 1:
+                done = extract_results_from_queue(done)
+                if len(res) == len(procs):
+                    for r in res:
+                        results += r
+                    break
+                if verbose:
+                    print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+
+            for proc in procs:
+                proc.join()
+
+        assert len(results) == done, "Done: {} len(results): {}".format(done, len(results))
+        print(" Done!")
+        results.sort(key=lambda x: x[0])
+        self.paths, self.hashes = zip(*results)
+
+    def thread_initialize(self, verbose=1):
+
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for path, dirs, files in os.walk(self.root):
+                pth += [path + "/" + file for file in files]
+            print(" Done!")
+            return sorted(pth)
 
         def define_batches_generator():
             splitted = (self.paths[start:start + step] for start in range(0, N, step))
@@ -49,47 +117,63 @@ class Hashdb:
 
         self.paths = read_paths()
         N = len(self.paths)
-        step = 100
+        step = 10
         batches = define_batches_generator()
 
         results = []
-        queue = mp.Queue()
-        jobs = mp.cpu_count()
         done = 0
-
-        print("\rFilling hash database... {}/{}".format(padto(done, N), N), end="")
+        if verbose:
+            print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
         while len(results) != N:
-            procs = [mp.Process(target=_process_batch, args=[next(batches), queue])
-                     for _ in range(jobs)]
+            threads = []
             res = []
-            for proc in procs:
-                proc.start()
-            while 1:
-                processed = queue.get()
-                if processed is not None:
-                    res += processed
-                    done += len(processed)
-                    print("\rFilling hash database... {}/{}".format(padto(done, N), N), end="")
-                    if len(res) // step == len(procs):
-                        results += res
-                        break
-                time.sleep(1)
-            for proc in procs:
-                proc.join()
+            for job in range(step):
+                batch = next(batches, ...)
+                if batch is ...:
+                    break
+                threads.append(thr.Thread(target=_process_batch_thr, args=[batch, res]))
+                threads[-1].start()
+            active = len(threads)
+            while len(res) != active:
+                # time.sleep(0.01)
+                if verbose:
+                    print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+            for r in res:
+                results += r
+                done += len(r)
+            for t in threads:
+                t.join()
 
+        print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
+        assert len(results) == done, "Done: {} len(results): {}".format(done, len(results))
+        print(" Done!")
+        results.sort(key=lambda x: x[0])
         self.paths, self.hashes = zip(*results)
 
-    def _old_initialize(self):
-        print("Initializing database...")
-        print("Gathering information...", end="")
-        for path, dirs, files in os.walk(self.root):
-            self.paths += [path + "/" + file for file in files]
-        self.paths.sort()
+    def _old_initialize(self, verbose=1):
+
+        def read_paths():
+            pth = []
+            print("Initializing database...")
+            print("Gathering information...", end="")
+            for p, dirs, files in os.walk(self.root):
+                pth += [p + "/" + file for file in files]
+            print(" Done!")
+            return sorted(pth)
+
+        def calc_hashes():
+            return [hashlite(path) for path in self.paths]
+
+        def calc_hashes_vrb():
+            hsh = []
+            for i, path in enumerate(self.paths):
+                hsh.append(hashlite(path))
+                print("\rFilling hash database... {}/{}".format(padto(i + 1, N), N), end=" ")
+            return hsh
+
+        self.paths = read_paths()
         N = len(self.paths)
-        print(" Done!")
-        for i, path in enumerate(self.paths):
-            self.hashes.append(hashlite(path))
-            print("\rFilling hash database... {}/{}".format(padto(i+1, N), N), end=" ")
+        self.hashes = calc_hashes_vrb() if verbose else calc_hashes()
         print("Done!")
 
     def check_duplicates(self):
@@ -166,6 +250,11 @@ class Hashdb:
 def _process_batch(paths, queue):
     hashes = [hashlite(path) for path in paths]
     queue.put(list(zip(paths, hashes)))
+
+
+def _process_batch_thr(paths, results):
+    hashes = [hashlite(path) for path in paths]
+    results.append(list(zip(paths, hashes)))
 
 
 def process_one(path):
