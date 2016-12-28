@@ -1,20 +1,18 @@
 import os
 import pickle
 import gzip
-import multiprocessing as mp
-import threading as thr
-import time
 import datetime
 
 from .utilities import hashlite, hardcompare, padto
 
 
 class Hashdb:
+
     def __init__(self, root, hashes, paths):
         if not os.path.exists(root):
             raise RuntimeError("No such directory: {}".format(root))
-        if root[-1] not in ("\\", "/"):
-            root += "/"
+        # if root[-1] not in ("\\", "/"):
+        #     root += "/"
         self.root = root
         self.dbpath = root + ".csxfilebase/hashes.db"
 
@@ -24,110 +22,10 @@ class Hashdb:
     @classmethod
     def create_new(cls, root):
         hashdb = cls(root, [], [])
-        hashdb.thread_initialize()
+        hashdb.initialize()
         return hashdb
 
-    def mp_initialize(self):
-
-        def read_paths():
-            pth = []
-            print("Initializing database...")
-            print("Gathering information...", end="")
-            for path, dirs, files in os.walk(self.root):
-                pth += [path + "/" + file for file in files]
-            print(" Done!")
-            return sorted(pth)
-
-        def define_batches_generator(N):
-            step = 1000
-            splitted = (self.paths[start:start + step] for start in range(0, N, step))
-            return splitted
-
-        def build_and_start_processes(jobs, batches, shared_list):
-            prcs = []
-            for job in range(jobs):
-                batch = next(batches, ...)
-                if batch is ...:
-                    break
-                prcs.append(mp.Process(target=_process_batch_thr, args=[batch, shared_list]))
-                prcs[-1].start()
-            return prcs
-
-        def fill_hash_database():
-            cpus = mp.cpu_count()
-            N = len(self.paths)
-            batches = define_batches_generator(N)
-
-            output = []
-            print("\rFilling hash database... {}/{} ".format(padto(0, N), N), end="")
-            while len(output) != N:
-                res = mp.Manager().list()
-                procs = build_and_start_processes(cpus, batches, res)
-                while len(res) != len(procs):
-                    print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
-                    time.sleep(0.1)
-                for r, proc in zip(res, procs):
-                    proc.join()
-                    output += r
-
-            print("\rFilling hash database... {}/{} ".format(padto(len(output), N), N), end="")
-            print(" Done!")
-            return output
-
-        self.paths = read_paths()
-        results = sorted(fill_hash_database(), key=lambda x: x[0])
-        self.paths, self.hashes = zip(*results)
-
-    def thread_initialize(self):
-
-        def read_paths():
-            pth = []
-            print("Initializing database...")
-            print("Gathering information...", end="")
-            for path, dirs, files in os.walk(self.root):
-                pth += [path + "/" + file for file in files]
-            print(" Done!")
-            return sorted(pth)
-
-        def build_and_start_threads(shared_list):
-            thrds = []
-            for job in range(step):
-                batch = next(batches, ...)
-                if batch is ...:
-                    break
-                thrds.append(thr.Thread(target=_process_batch_thr, args=[batch, shared_list]))
-                thrds[-1].start()
-            return thrds
-
-        def define_batches_generator():
-            splitted = (self.paths[start:start + step] for start in range(0, N, step))
-            return splitted
-
-        self.paths = read_paths()
-        N = len(self.paths)
-        step = 10
-        batches = define_batches_generator()
-
-        results = []
-        done = 0
-        print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
-        while len(results) != N:
-            res = []
-            threads = build_and_start_threads(res)
-            while len(res) != len(threads):
-                print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
-            for r, t in zip(res, threads):
-                results += r
-                done += len(r)
-                t.join()
-
-        print("\rFilling hash database... {}/{} ".format(padto(done, N), N), end="")
-        assert len(results) == done, "Done: {} len(results): {}".format(done, len(results))
-        print(" Done!")
-        results.sort(key=lambda x: x[0])
-        self.paths, self.hashes = zip(*results)
-
-    def old_initialize(self):
+    def initialize(self):
 
         def read_paths():
             pth = []
@@ -150,67 +48,61 @@ class Hashdb:
         self.hashes = calc_hashes_vrb()
         print("Done!")
 
-    def check_duplicates(self, parallel=False):
+    def check_duplicates(self, other=None, outfl=None):
 
         def duplicate_hashes_exist():
-            indiv = list(set(self.hashes))
-            if len(indiv) == len(self.hashes):
-                return False
-            return True
+            if other is None:
+                indiv = list(set(self.hashes))
+                if len(indiv) == len(self.hashes):
+                    return False
+                return True
+            else:
+                indiv = list(set(self.hashes + other.hashes))
+                if len(indiv) == len(self.hashes) + len(other.hashes):
+                    return False
+                return True
 
-        def construct_batch_generator(n):
-            batch = []
-            k = 0
-            for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
-                for j, (righthash, rightpath) in enumerate(zip(self.hashes[i+1:], self.paths[i+1:])):
-                    batch.append([lefthash, leftpath, righthash, rightpath])
-                    if k == n:
-                        yield batch
-                        batch = []
-                        k = 0
+        def extract_duplicates_against_self():
+            dupe = {leftpath: [rightpath for righthash, rightpath in zip(self.hashes[i+1:], self.paths[i+1:])
+                               if compare_entities(lefthash, leftpath, righthash, rightpath)]
+                    for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths))}
+            # dupe = dict()
+            # mylen = len(self.hashes)
+            # steps = ((mylen ** 2) - mylen) // 2
+            # for i, (lefthash, leftpath) in enumerate(zip(self.hashes, self.paths)):
+            #     for j, (righthash, rightpath) in enumerate(zip(self.hashes[i+1:], self.paths[i+1:])):
+            #         print("\rChecking for duplicates... {0:>{w}}/{1}"
+            #               .format(i*mylen + j, steps, w=len(str(steps))),
+            #               end="")
+            #         if compare_entities(lefthash, leftpath, righthash, rightpath):
+            #             if lefthash in dupe:
+            #                 dupe[leftpath].append(rightpath)
+            #             else:
+            #                 dupe[leftpath] = [rightpath]
+            return {key: val for key, val in dupe.items() if val}
 
-        def extract_duplicates():
+        def extract_duplicates_against_other():
+            thislen = len(self.hashes)
+            thatlen = len(other.hashes)
+            steps = thislen * thatlen
             dupe = dict()
-            steps = (len(self.hashes) ** 2 - len(self.hashes)) // 2
-            k = 1
-            for batch in construct_batch_generator(1):
-                k = _find_duplicates(*(batch[0] + [dupe, k]))
-            print("\rChecking for duplicates... {}/{}"
-                  .format(padto(k, steps), steps),
-                  end="")
-            return dupe
-
-        def mp_extract_duplicates():
-
-            def build_processes(counter):
-                prcs = []
-                batches = construct_batch_generator(1000)
-                for _ in range(mp.cpu_count() + 1):
-                    batch = next(batches, ...)
-                    if batch is ...:
-                        break
-                    prcs.append(mp.Process(target=_find_duplicates, args=batch + [dupe, counter]))
-                    prcs[-1].start()
-                return prcs
-
-            dupe = mp.Manager().dict()
-            steps = (len(self.hashes) ** 2 - len(self.hashes)) // 2
-            processed = 0
-            while processed != steps:
-                finished = mp.Value("i", 0)
-                procs = build_processes(finished)
-                while finished != len(procs):
-                    print("\rChecking for duplicates... {}/{}"
-                          .format(padto(processed, steps), steps),
+            for i, lefthash, leftpath in zip(range(thislen), self.hashes, self.paths):
+                for j, righthash, rightpath in zip(range(thatlen), other.hashes, other.paths):
+                    print("\rChecking for duplicates {0:>{w}}/{1}"
+                          .format(i * thislen + j, steps, w=len(str(steps))),
                           end="")
-                processed += finished
-                for proc in procs:
-                    proc.join()
-
-            print("\rChecking for duplicates... {}/{}"
-                  .format(padto(processed, steps), steps),
-                  end="")
+                    if compare_entities(lefthash, leftpath, righthash, rightpath):
+                        if leftpath in dupe:
+                            dupe[leftpath].append(rightpath)
+                        else:
+                            dupe[leftpath] = [rightpath]
             return dupe
+
+        def compare_entities(lefthash, leftpath, righthash, rightpath):
+            if lefthash == righthash:
+                return hardcompare(leftpath, rightpath)
+            else:
+                return False
 
         def construct_output_string():
             dchain = "DUPLICATES IN {}\n".format(self.root)
@@ -220,11 +112,29 @@ class Hashdb:
                 dchain += "\n"
             return dchain
 
+        def dump_output_to_file():
+            if outfl is None:
+                flname = self.root
+                flname += "duplicates"
+                flname += "_" + datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
+                flname += ".txt"
+            else:
+                flname = outfl
+
+            handle = open(flname, "w")
+            handle.write(dupechain)
+            handle.close()
+
+            print("Duplicate-groups dumped to", flname)
+
         if not duplicate_hashes_exist():
             print("No duplicates!")
             return
 
-        duplicates = mp_extract_duplicates() if parallel else extract_duplicates()
+        if other is None:
+            duplicates = extract_duplicates_against_self()
+        else:
+            duplicates = extract_duplicates_against_other()
         print(" Done!")
 
         if len(duplicates) == 0:
@@ -234,27 +144,7 @@ class Hashdb:
             print(len(duplicates), "duplicate-groups found!")
 
         dupechain = construct_output_string()
-
-        flname = self.root
-        flname += "_" + datetime.datetime.now().strftime("%Y.%m.%d_%H.%M.%S")
-        flname += "_" + "duplicates.txt"
-        outfl = open(flname, "w")
-        outfl.write(dupechain)
-        outfl.close()
-
-        print("Duplicate-groups dumped to", flname)
-
-    def check_duplicates_alternative(self):
-        indiv = list(set(self.hashes))
-        dupers = self.hashes[:]
-        for ind in indiv:
-            dupers.remove(ind)
-        duplications = []
-        for ind in indiv:
-            if ind in dupers:
-                pass
-
-        pass  # TODO: filter out individual hashes first!
+        dump_output_to_file()
 
     def save(self):
         try:
@@ -273,27 +163,3 @@ class Hashdb:
         dbhandle = gzip.open(root + ".csxfilebase/hashes.db", "rb")
         hashes, paths = pickle.load(dbhandle)
         return cls(root, hashes, paths, empty=False)
-
-
-def _process_batch(paths, queue):
-    hashes = [hashlite(path) for path in paths]
-    queue.put(list(zip(paths, hashes)))
-
-
-def _process_batch_thr(paths, results):
-    hashes = [hashlite(path) for path in paths]
-    results.append(list(zip(paths, hashes)))
-
-
-def _find_duplicates(lefthashes, leftpaths, righthashes, rightpaths, dupe, counter):
-    for lefthash, leftpath in zip(lefthashes, leftpaths):
-        for righthash, rightpath in zip(righthashes, rightpaths):
-            righthash, rightpath = righthash, rightpath
-            if lefthash == righthash:
-                if hardcompare(leftpath, rightpath):
-                    if leftpath in dupe:
-                        dupe[leftpath].append(rightpath)
-                    else:
-                        dupe[leftpath] = [rightpath]
-            counter += 1
-    return counter
