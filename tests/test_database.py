@@ -1,11 +1,11 @@
 import unittest
 
-from CsxFileBase.database import Hashdb
+from algo.database import HashTree
 
 
 class Test_Database(unittest.TestCase):
     def setUp(self):
-        self.db = Hashdb("D:/Data/raw/tiles/", [], [])
+        self.db = HashTree("D:/Data/raw/tiles/", [], [])
 
     def test_two_approaches_give_the_same_result(self):
         self.db.mp_initialize()
