@@ -8,6 +8,38 @@ from CsxFileBase.algo.database import Hashdb
 from CsxFileBase.utilities import hardcompare
 
 
+def argparse():
+    try:
+        dbpath = sys.argv[1]
+    except IndexError:
+        dbpath = os.getcwd()
+
+    try:
+        odbpath = sys.argv[2]
+        print("Extrinsic search: {} vs {}".format(dbpath, odbpath))
+    except IndexError:
+        odbpath = None
+        print("Intrinsic search in {}".format(dbpath))
+    return dbpath, odbpath
+
+
+def sanity_check(dbpath, odbpath):
+    if not os.path.exists(dbpath):
+        raise RuntimeError("No such directory:", dbpath)
+    if odbpath is not None:
+        if not os.path.exists(odbpath):
+            raise RuntimeError("No such directory:", odbpath)
+
+
+def create_dbs(dbpath, odbpath=None):
+    db = Hashdb.create_new(dbpath)
+    if odbpath is not None:
+        odb = Hashdb.create_new(odbpath)
+    else:
+        odb = None
+    return db, odb
+
+
 def duplicate_hashes_exist(left, right=None):
     if right is None:
         indiv = list(set(left.hashes))
@@ -21,8 +53,15 @@ def duplicate_hashes_exist(left, right=None):
         return True
 
 
-def silently(left, right=None):
-    if not right:
+def compare_entities(lefthash, leftpath, righthash, rightpath):
+    if lefthash == righthash:
+        return hardcompare(leftpath, rightpath)
+    else:
+        return False
+
+
+def extract_duplicates_silently(left, right=None):
+    if right is None:
         dupe = {leftpath: [rightpath for righthash, rightpath
                            in zip(left.hashes[i + 1:], left.paths[i + 1:])
                            if compare_entities(lefthash, leftpath, righthash, rightpath)]
@@ -39,13 +78,13 @@ def silently(left, right=None):
 
 def extract_duplicates_against_self(left):
     dupe = defaultdict(list)
-    mylen = len(left.hashes)
-    steps = ((mylen ** 2) - mylen) // 2
+    thislen = len(left.hashes)
+    steps = ((thislen ** 2) - thislen) // 2
     strlen = len(str(steps))
     for i, (lefthash, leftpath) in enumerate(zip(left.hashes, left.paths)):
         for j, (righthash, rightpath) in enumerate(zip(left.hashes[i + 1:], left.paths[i + 1:])):
             print("\rChecking for duplicates... {:>{w}}/{}"
-                  .format(i * mylen + j, steps, w=strlen),
+                  .format(i * thislen + j, steps, w=strlen),
                   end="")
             if compare_entities(lefthash, leftpath, righthash, rightpath):
                 dupe[leftpath].append(rightpath)
@@ -53,11 +92,11 @@ def extract_duplicates_against_self(left):
 
 
 def extract_duplicates_against_other(left, right):
+    dupe = defaultdict(list)
     thislen = len(left.hashes)
     thatlen = len(right.hashes)
     steps = thislen * thatlen
     strlen = len(str(steps))
-    dupe = defaultdict(list)
     for i, lefthash, leftpath in zip(range(thislen), left.hashes, left.paths):
         for j, righthash, rightpath in zip(range(thatlen), right.hashes, right.paths):
             print("\rChecking for duplicates {:>{w}}/{}"
@@ -68,14 +107,7 @@ def extract_duplicates_against_other(left, right):
     return dupe
 
 
-def compare_entities(lefthash, leftpath, righthash, rightpath):
-    if lefthash == righthash:
-        return hardcompare(leftpath, rightpath)
-    else:
-        return False
-
-
-def construct_output_string(left, right=None):
+def construct_output_string(duplicates, left, right=None):
     dchain = "DUPLICATES IN {}\n".format(left.root)
     for left in duplicates.keys():
         dchain += "-" * 50 + "\n"
@@ -84,7 +116,7 @@ def construct_output_string(left, right=None):
     return dchain
 
 
-def dump_output_to_file(left, right=None, outfl=None):
+def dump_output_to_file(dupechain, left, right=None, outfl=None):
     if outfl is None:
         flname = left.root
         flname += "duplicates"
@@ -100,48 +132,38 @@ def dump_output_to_file(left, right=None, outfl=None):
     print("Duplicate-groups dumped to", flname)
 
 
-try:
-    hashdb = sys.argv[1]
-except IndexError:
-    hashdb = os.getcwd()
+def run_algo(db, odb):
+    db.check_duplicates(right=odb)
 
-try:
-    otherdb = sys.argv[2]
-    print("Extrinsic search: {} vs {}".format(hashdb, otherdb))
-except IndexError:
-    otherdb = None
-    print("Intrinsic search in {}".format(hashdb))
+    if not duplicate_hashes_exist(db, odb):
+        raise RuntimeError("No duplicates!")
 
-start = time.time()
+    if odb is None:
+        duplicates = extract_duplicates_against_self(db)
+    else:
+        duplicates = extract_duplicates_against_other(db, odb)
+    print(" Done!")
 
-if not os.path.exists(hashdb):
-    raise RuntimeError("No such directory:", hashdb)
+    if len(duplicates) == 0:
+        print("No duplicates found!")
+    else:
+        print(len(duplicates), "duplicate-groups found!")
 
-hashdb = Hashdb.create_new(hashdb)
-if otherdb is not None:
-    if not os.path.exists(otherdb):
-        raise RuntimeError("No such directory:", otherdb)
-    otherdb = Hashdb.create_new(otherdb)
-    print("Extrinsic mode!")
-else:
-    print("Intrinsic mode!")
+    outchain = construct_output_string(duplicates, db, odb)
+    dump_output_to_file(outchain, db, odb)
 
-hashdb.check_duplicates(right=otherdb)
-print("Time elapsed: {} s".format(int(time.time() - start)))
 
-if not duplicate_hashes_exist(hashdb, otherdb):
-    raise RuntimeError("No duplicates!")
+def main():
+    start = time.time()
+    hdbpath, odbpath = argparse()
+    hashdb, otherdb = create_dbs(hdbpath, odbpath)
+    run_algo(hashdb, otherdb)
+    seconds = time.time() - start
+    minutes = seconds / 60
+    m = minutes > 3
+    print("Run took {0[0]:>.2f} {0[1]}!".format(
+        (minutes, "minutes") if m else (seconds, "seconds")
+    ))
 
-if otherdb is None:
-    duplicates = extract_duplicates_against_self(hashdb)
-else:
-    duplicates = extract_duplicates_against_other(hashdb, otherdb)
-print(" Done!")
-
-if len(duplicates) == 0:
-    print("No duplicates found!")
-else:
-    print(len(duplicates), "duplicate-groups found!")
-
-dupechain = construct_output_string(hashdb)
-dump_output_to_file(hashdb, otherdb)
+if __name__ == '__main__':
+    main()
