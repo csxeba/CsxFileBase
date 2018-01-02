@@ -1,42 +1,74 @@
 import os
+import itertools
 from ..utilities import hashlite, hashhard
 
 
 class Entity:
 
     def __init__(self, path, parent=None):
-        self.path, self.name = os.path.split(path)
+        self.path = path
         self.parent = parent
+        self.level = 0 if parent is None else parent.level + 1
 
     def __ge__(self, other):
-        return self.path + self.name >= other.path + other.name
+        return self.path >= other.path
 
     def __le__(self, other):
-        return self.path + self.name <= other.path + other.name
+        return self.path <= other.path
 
     def __gt__(self, other):
-        return self.path + self.name > other.path + other.name
+        return self.path > other.path
 
     def __lt__(self, other):
-        return self.path + self.name < other.path + other.name
+        return self.path < other.path
+
+
+class Leaf(Entity):
+
+    def __init__(self, path, parent=None, hsh=None):
+        super().__init__(path, parent)
+        self.litehash = str(hashlite(self.path) if hsh is None else hsh).encode()
+        self._hardhash = None
+
+    @property
+    def hardhash(self):
+        if self._hardhash is None:
+            self._hardhash = hashhard(self.path)
+        return self._hardhash
+
+    def __eq__(self, other):
+        if self.litehash != other.litehash:
+            return False
+        else:
+            return self.hardhash == other.hardhash
 
 
 class Node(Entity):
 
     def __init__(self, path, parent=None):
         super().__init__(path, parent)
+        self.path += "/"
 
-        _, dirz, flz = next(os.walk(path))
-        self.leaves = sorted([Leaf(path+fl) for fl in flz])
-        self.nodes = sorted([Node(path + dr) for dr in dirz])
-        self.hashlite = hashlite(b".".join(ent.hashlite for ent in self.nodes + self.leaves))
-        self._hashhard = None
+        self.level = 0 if parent is None else parent.level+1
+        try:
+            _, dirz, flz = next(os.walk(self.path))
+        except StopIteration:
+            self.leaves, self.nodes, self.litehash = [], [], b""
+        else:
+            self.leaves = sorted([Leaf(self.path+fl, parent=self) for fl in flz])
+            self.nodes = sorted([Node(self.path+dr, parent=self) for dr in dirz])
+            if self.N:
+                hashconcat = b".".join(ent.litehash for ent in self.nodes + self.leaves)
+                self.litehash = str(hashlite(hashconcat)).encode()
+            else:
+                self.litehash = b""
+        self._hardhash = None
 
     @property
-    def hashhard(self):
-        if self._hashhard is None:
-            self._hashhard = hashhard(b".".join(ent.hashhard for ent in self.nodes + self.leaves))
-        return self._hashhard
+    def hardhash(self):
+        if self._hardhash is None:
+            self._hardhash = hashhard(b".".join(ent.hardhash for ent in self.nodes + self.leaves))
+        return self._hardhash
 
     @property
     def N(self):
@@ -52,21 +84,14 @@ class Node(Entity):
         return all(left == right for left, right in zip(self.subs, other.subs))
 
 
-class Leaf(Entity):
+class MerkleTree:
 
-    def __init__(self, path, hsh=None):
-        super().__init__(path)
-        self.litehash = hashlite(self.path) if hash is None else hsh
-        self._hardhash = None
+    def __init__(self, root):
+        self.root = Node(root)
+        self.flatview = list(itertools.chain(self.flatnodes(self.root)))
 
-    @property
-    def hardhash(self):
-        if self._hardhash is None:
-            self._hardhash = hashhard(self.path)
-        return self._hardhash
-
-    def __eq__(self, other):
-        if self.litehash != other.litehash:
-            return False
+    def flatnodes(self, node):
+        if not len(node.nodes):
+            return []
         else:
-            return self.hardhash == other.hardhash
+            return node.nodes + [self.flatnodes(subnode) for subnode in node.nodes]
