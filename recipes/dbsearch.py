@@ -23,7 +23,7 @@ def argparse():
     return dbpath, odbpath
 
 
-def sanity_check(dbpath, odbpath):
+def sanity_check(dbpath: Hashdb, odbpath: Hashdb):
     if not os.path.exists(dbpath):
         raise RuntimeError("No such directory:", dbpath)
     if odbpath is not None:
@@ -31,7 +31,7 @@ def sanity_check(dbpath, odbpath):
             raise RuntimeError("No such directory:", odbpath)
 
 
-def create_dbs(dbpath, odbpath=None):
+def create_dbs(dbpath: Hashdb, odbpath: Hashdb=None):
     db = Hashdb.create_new(dbpath)
     if odbpath is not None:
         odb = Hashdb.create_new(odbpath)
@@ -40,7 +40,7 @@ def create_dbs(dbpath, odbpath=None):
     return db, odb
 
 
-def duplicate_hashes_exist(left, right=None):
+def duplicate_hashes_exist(left: Hashdb, right: Hashdb=None):
     if right is None:
         indiv = list(set(left.hashes))
         if len(indiv) == len(left.hashes):
@@ -54,44 +54,25 @@ def duplicate_hashes_exist(left, right=None):
 
 
 def compare_entities(lefthash, leftpath, righthash, rightpath):
-    if lefthash == righthash:
-        return hardcompare(leftpath, rightpath)
-    else:
+    if lefthash != righthash:
         return False
+    return hardcompare(leftpath, rightpath)
 
 
-def extract_duplicates_silently(left, right=None):
-    if right is None:
-        dupe = {leftpath: [rightpath for righthash, rightpath
-                           in zip(left.hashes[i + 1:], left.paths[i + 1:])
-                           if compare_entities(lefthash, leftpath, righthash, rightpath)]
-                for i, (lefthash, leftpath)
-                in enumerate(zip(left.hashes, left.paths))}
-    else:
-        dupe = {leftpath: [rightpath for righthash, rightpath
-                           in zip(right.hashes, right.paths)
-                           if compare_entities(lefthash, leftpath, righthash, rightpath)]
-                for lefthash, leftpath
-                in zip(left.hashes, left.paths)}
-    return {key: val for key, val in dupe.items() if val}
-
-
-def extract_duplicates_against_self(left):
+def extract_duplicates_against_self(left: Hashdb):
     dupe = defaultdict(list)
     thislen = len(left.hashes)
     steps = ((thislen ** 2) - thislen) // 2
     strlen = len(str(steps))
     for i, (lefthash, leftpath) in enumerate(zip(left.hashes, left.paths)):
         for j, (righthash, rightpath) in enumerate(zip(left.hashes[i + 1:], left.paths[i + 1:])):
-            print("\rChecking for duplicates... {:>{w}}/{}"
-                  .format(i * thislen + j, steps, w=strlen),
-                  end="")
+            print(f"\rChecking for duplicates... {steps:>{strlen}}/{i*thislen+j}", end="")
             if compare_entities(lefthash, leftpath, righthash, rightpath):
                 dupe[leftpath].append(rightpath)
     return dupe
 
 
-def extract_duplicates_against_other(left, right):
+def extract_duplicates_against_other(left: Hashdb, right: Hashdb):
     dupe = defaultdict(list)
     thislen = len(left.hashes)
     thatlen = len(right.hashes)
@@ -107,7 +88,7 @@ def extract_duplicates_against_other(left, right):
     return dupe
 
 
-def construct_output_string(duplicates, left, right=None):
+def construct_output_string(duplicates, left: Hashdb, right: Hashdb=None):
     dchain = "DUPLICATES IN {}\n".format(left.root)
     for left in duplicates.keys():
         dchain += "-" * 50 + "\n"
@@ -116,7 +97,7 @@ def construct_output_string(duplicates, left, right=None):
     return dchain
 
 
-def dump_output_to_file(dupechain, left, right=None, outfl=None):
+def dump_output_to_file(dupechain, left: Hashdb, right: Hashdb=None, outfl=None):
     if outfl is None:
         flname = left.root
         flname += "duplicates"
@@ -132,16 +113,12 @@ def dump_output_to_file(dupechain, left, right=None, outfl=None):
     print("Duplicate-groups dumped to", flname)
 
 
-def run_algo(db, odb):
-    db.check_duplicates(right=odb)
+def run_algo(db: Hashdb, odb: Hashdb):
 
     if not duplicate_hashes_exist(db, odb):
         raise RuntimeError("No duplicates!")
 
-    if odb is None:
-        duplicates = extract_duplicates_against_self(db)
-    else:
-        duplicates = extract_duplicates_against_other(db, odb)
+    duplicates = extract_duplicates_against_self(db) if odb is None else extract_duplicates_against_other(db, odb)
     print(" Done!")
 
     if len(duplicates) == 0:
@@ -164,6 +141,7 @@ def main():
     print("Run took {0[0]:>.2f} {0[1]}!".format(
         (minutes, "minutes") if m else (seconds, "seconds")
     ))
+
 
 if __name__ == '__main__':
     main()

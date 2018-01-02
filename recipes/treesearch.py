@@ -8,3 +8,4 @@ try:
 except IndexError:
     root = os.getcwd()
 tree = Node(root)
+
