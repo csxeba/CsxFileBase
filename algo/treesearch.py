@@ -5,7 +5,8 @@ from collections import defaultdict
 from structures.merkletree import MerkleTree, Node, Leaf
 
 
-def create_trees(treepath, otherpath=None):
+def create_models(treepath, otherpath=None):
+    print(" [I] Building Merkle hash tree...")
     tree = MerkleTree(treepath, prune=True)
     if otherpath is not None:
         other = MerkleTree(otherpath)

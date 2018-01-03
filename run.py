@@ -5,9 +5,9 @@ from utilities.common import parse_args
 
 def main():
     start = time.time()
-    rootpath, otherpath, algo = parse_args()
-    mod = (treesearch, dbsearch)[algo == "database"]
-    root, other = mod.create_models(rootpath, otherpath if otherpath else None)
+    arg = parse_args()
+    mod = (treesearch, dbsearch)[arg.algorithm == "database"]
+    root, other = mod.create_models(arg.root, arg.other if arg.other else None)
     mod.find_duplicates(root, other)
     seconds = time.time() - start
     minutes = seconds / 60

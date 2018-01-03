@@ -51,6 +51,7 @@ class Leaf(Entity):
         lh = hashlite(path)
         self.litehash = str(lh).encode() if lh != 1 else b""
         self._hardhash = None
+        print(f"{'-'*(self.level+1)}>{self.__class__.__name__} {int(self.litehash):>10}")
 
     @property
     def hardhash(self):
@@ -79,6 +80,7 @@ class Node(Entity):
                 self.litehash = str(hashlite(hashconcat)).encode()
             else:
                 self.litehash = b""
+        print(f"{'-'*(self.level+1)}>{self.__class__.__name__} {int(self.litehash):>10}")
         self._hardhash = None
 
     @property

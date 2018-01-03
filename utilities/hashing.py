@@ -9,11 +9,14 @@ def hardcompare(pth1, pth2, blocksize=65536):
     return h1 == h2
 
 
-def hashlite(source):
+def hashlite(source, blocksize=65536):
     if isinstance(source, str):
         with open(source, "rb") as handle:
             source = handle.read()
-    return adler32(source)
+    hsh = 1
+    for slc in (source[start:start+blocksize] for start in range(0, len(source), blocksize)):
+        hsh = adler32(slc, hsh)
+    return hsh
 
 
 def hashhard(source, blocksize=65536):
