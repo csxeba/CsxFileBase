@@ -1,7 +1,12 @@
 import os
 
-from CsxFileBase.algo.hashtree import MerkleTree
-
+from structures.merkletree import MerkleTree
 
 mt = MerkleTree(os.path.expanduser("~/SciProjects/Project_merkle/"))
-print(mt.flatview)
+dupenode, dupeleaf = mt.find_duplicates()
+for lite, dupes in dupenode.items():
+    print("-"*50)
+    print(lite, "->")
+    print("\n".join(dupes))
+print("*"*50)
+print(dupeleaf)
