@@ -36,7 +36,7 @@ def compare_entities(lefthash, leftpath, righthash, rightpath):
     return False
 
 
-def extract_duplicates_against_self(left: Hashdb):
+def extract_duplicates_against_self_old(left: Hashdb):
     dupe = defaultdict(list)
     N = len(left.hashes)
     steps = ((N ** 2) - N) // 2
@@ -45,6 +45,23 @@ def extract_duplicates_against_self(left: Hashdb):
             print(f"\rChecking for duplicates... {steps}/{i*N+j}", end=" ")
             if compare_entities(lefthash, leftpath, righthash, rightpath):
                 dupe[leftpath].append(rightpath)
+    print()
+    return dupe
+
+
+def extract_duplicates_against_self(left: Hashdb):
+    dupe = defaultdict(set)
+    N = len(left.hashes)
+    hashes = left.hashes
+    paths = left.paths
+    argsorted = [i for i, hsh in zip(range(N), left.hashes)]
+    for i, (pa, na) in enumerate(zip(argsorted[:-1], argsorted[1:]), start=1):
+        print(f"\rChecking for duplicates... {i}/{N}", end="")
+        lhash, lpath = hashes[pa], paths[pa]
+        rhash, rpath = hashes[na], paths[na]
+        if compare_entities(lhash, lpath, rhash, rpath):
+            dupe[hashes[pa]].add(paths[na])
+            dupe[hashes[pa]].add(paths[pa])
     print()
     return dupe
 
@@ -64,12 +81,13 @@ def extract_duplicates_against_other(left: Hashdb, right: Hashdb):
 
 
 def construct_output_string(duplicates, leftdb, rightdb):
-    dchain = [f"DUPLICATES IN {leftdb.root}"]
-    if rightdb:
-        dchain[0] += f" vs {rightdb.root}"
-    for left in duplicates.keys():
-        dchain += ["-" * 50 + "\n", "\n".join(sorted([left] + duplicates[left]))]
-    return "\n".join(dchain)
+    sep = "-"*50
+    nl = "\n"
+    dchain = (
+        f"DUPLICATES IN {leftdb.root}\n" + (f" VS {rightdb.root}" if rightdb else "") +
+        "\n".join(f"{sep}\n{hsh}:\n{nl.join(duplicates[hsh])}" for hsh in sorted(duplicates))
+    )
+    return dchain
 
 
 def dump_output_to_file(dupechain, outfl=None):
