@@ -36,33 +36,20 @@ def compare_entities(lefthash, leftpath, righthash, rightpath):
     return False
 
 
-def extract_duplicates_against_self_old(left: Hashdb):
-    dupe = defaultdict(list)
-    N = len(left.hashes)
-    steps = ((N ** 2) - N) // 2
-    for i, (lefthash, leftpath) in enumerate(zip(left.hashes, left.paths)):
-        for j, (righthash, rightpath) in enumerate(zip(left.hashes[i + 1:], left.paths[i + 1:])):
-            print(f"\rChecking for duplicates... {steps}/{i*N+j}", end=" ")
-            if compare_entities(lefthash, leftpath, righthash, rightpath):
-                dupe[leftpath].append(rightpath)
-    print()
-    return dupe
-
-
 def extract_duplicates_against_self(left: Hashdb):
     dupe = defaultdict(set)
     N = len(left.hashes)
+    no_steps = N - 1
     hashes = left.hashes
     paths = left.paths
-    argsorted = [i for i, hsh in zip(range(N), left.hashes)]
-    for i, (pa, na) in enumerate(zip(argsorted[:-1], argsorted[1:]), start=1):
-        print(f"\rChecking for duplicates... {i}/{N}", end="")
-        lhash, lpath = hashes[pa], paths[pa]
-        rhash, rpath = hashes[na], paths[na]
+    argsorted = (arg for _, arg in sorted(zip(left.hashes, range(N))) if arg < N-1)
+    for i, hash_idx in enumerate(argsorted, start=1):
+        print(f"\rChecking for duplicates... {no_steps}/{i}", end="")
+        lhash, rhash = hashes[hash_idx:hash_idx+2]
+        lpath, rpath = paths[hash_idx:hash_idx+2]
         if compare_entities(lhash, lpath, rhash, rpath):
-            dupe[hashes[pa]].add(paths[na])
-            dupe[hashes[pa]].add(paths[pa])
-    print()
+            dupe[lhash].update({lpath, rpath})
+    print(flush=True)
     return dupe
 
 
@@ -76,7 +63,7 @@ def extract_duplicates_against_other(left: Hashdb, right: Hashdb):
             print(f"\rChecking for duplicates {steps}/{i*thislen+j}", end=" ")
             if compare_entities(lefthash, leftpath, righthash, rightpath):
                 dupe[leftpath].append(rightpath)
-    print()
+    print(flush=True)
     return dupe
 
 

@@ -1,8 +1,6 @@
 import os
-import gzip
-import pickle
 
-from utilities import hashlite, padto
+from utilities import hashlite, EMPTY_LIGHT_HASH
 
 
 class Hashdb:
@@ -10,8 +8,7 @@ class Hashdb:
     def __init__(self, root, hashes, paths):
         if not os.path.exists(root):
             raise RuntimeError("No such directory: {}".format(root))
-        self.root = root
-
+        self.root = os.path.abspath(root)
         self.hashes = hashes
         self.paths = paths
 
@@ -22,26 +19,24 @@ class Hashdb:
         return hashdb
 
     def initialize(self):
-
-        def read_paths():
-            pth = []
-            print("Initializing database...")
-            print("Gathering information...", end="")
-            for p, dirs, files in os.walk(self.root):
-                pth += [p + "/" + file for file in files]
-            print(" Done!")
-            return sorted(pth)
-
-        def calc_hashes_vrb():
-            hsh = []
-            for i, path in enumerate(self.paths):
-                hsh.append(hashlite(path))
-                print("\rFilling hash database... {:>{w}}/{}"
-                      .format(i + 1, N, w=strlen), end=" ")
-            return hsh
-
-        self.paths = read_paths()
+        print("Initializing hash database on {}".format(self.root))
+        self.paths = []
+        self.hashes = []
+        print("Collectiong information...")
+        for node, dirz, files in os.walk(self.root):
+            self.paths += [os.path.join(node, f) for f in files]
         N = len(self.paths)
-        strlen = len(str(N))
-        self.hashes = calc_hashes_vrb()
-        print("Done!")
+        assert len(set(self.paths)) == N
+        print("Found {} file entries".format(N))
+        empty_indices = []
+        for i, path in enumerate(self.paths):
+            print(f"\rFilling hash database {N}/{i+1}", end="")
+            lite = hashlite(path)
+            if lite == EMPTY_LIGHT_HASH:
+                empty_indices.append(i)
+                continue
+            self.hashes.append(lite)
+        print(flush=True)
+        for i in empty_indices[::-1]:
+            self.paths.pop(i)
+        assert len(self.hashes) == len(self.paths)

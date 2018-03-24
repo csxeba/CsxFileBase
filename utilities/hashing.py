@@ -2,6 +2,9 @@ from zlib import adler32
 from hashlib import sha1
 
 
+EMPTY_LIGHT_HASH = 1
+
+
 def hardcompare(pth1, pth2, blocksize=65536):
     h1, h2 = hashhard(pth1, blocksize), hashhard(pth2, blocksize)
     if h1 == h2 == -1:
