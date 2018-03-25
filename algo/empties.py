@@ -1,6 +1,6 @@
 import os
 
-from ..utilities.hashing import hashlite
+from ..utility.hashing import hashlite
 
 
 def print_empties(start):

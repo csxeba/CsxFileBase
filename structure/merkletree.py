@@ -1,6 +1,6 @@
 import os
 
-from utilities import hashlite, hashhard
+from utility import hashlite, hashhard
 
 
 class Entity:

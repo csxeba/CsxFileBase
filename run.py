@@ -1,6 +1,6 @@
 import time
 from algo import dbsearch, treesearch
-from utilities.common import parse_args
+from utility.common import parse_args
 
 
 def main():

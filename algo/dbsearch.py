@@ -1,9 +1,9 @@
 from collections import defaultdict
 from datetime import datetime
 
-from structures.database import Hashdb
+from structure.database import Hashdb
 
-from utilities import hardcompare
+from utility import hardcompare
 
 
 def create_models(dbpath: Hashdb, odbpath: Hashdb=None):

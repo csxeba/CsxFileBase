@@ -1,6 +1,6 @@
 import os
 
-from structures.merkletree import MerkleTree
+from structure.merkletree import MerkleTree
 
 mt = MerkleTree(os.path.expanduser("~/SciProjects/Project_merkle/"))
 dupenode, dupeleaf = mt.find_duplicates()

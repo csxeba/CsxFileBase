@@ -1,6 +1,6 @@
 import os
 
-from utilities import hashlite, EMPTY_LIGHT_HASH
+from utility import hashlite, EMPTY_LIGHT_HASH
 
 
 class Hashdb:
