@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from collections import defaultdict
 
-from structure.merkletree import MerkleTree, Node, Leaf
+from ..structure.merkletree import MerkleTree, Node, Leaf
 
 
 def create_models(treepath, otherpath=None):

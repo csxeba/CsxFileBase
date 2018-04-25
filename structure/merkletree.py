@@ -1,6 +1,6 @@
 import os
 
-from utility import hashlite, hashhard
+from ..utility import hashlite, hashhard, logger
 
 
 class Entity:
@@ -110,7 +110,7 @@ class MerkleTree:
             self.prune_empties()
 
     def prune_empties(self):
-        print(" [I] Pruning empty entities...")
+        print("Pruning empty entities...")
         self.deleteme = list(filter(lambda ent: ent.empty, self.flatview))
         self.working = list(filter(lambda ent: not ent.empty, self.flatview))
         self.working.sort(key=lambda ent: (ent.level, ent.path))

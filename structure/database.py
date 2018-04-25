@@ -1,6 +1,6 @@
 import os
 
-from utility import hashlite, EMPTY_LIGHT_HASH
+from ..utility import hashlite, EMPTY_LIGHT_HASH, logger
 
 
 class Hashdb:
@@ -19,24 +19,24 @@ class Hashdb:
         return hashdb
 
     def initialize(self):
-        print("Initializing hash database on {}".format(self.root))
+        logger.info("Initializing hash database on {}".format(self.root))
         self.paths = []
         self.hashes = []
-        print("Collectiong information...")
+        logger.info("Collectiong information...")
         for node, dirz, files in os.walk(self.root):
             self.paths += [os.path.join(node, f) for f in files]
         N = len(self.paths)
         assert len(set(self.paths)) == N
-        print("Found {} file entries".format(N))
+        logger.info("Found {} file entries".format(N))
         empty_indices = []
         for i, path in enumerate(self.paths):
-            print(f"\rFilling hash database {N}/{i+1}", end="")
+            logger.info(f"\rFilling hash database {N}/{i+1}", end="")
             lite = hashlite(path)
             if lite == EMPTY_LIGHT_HASH:
                 empty_indices.append(i)
                 continue
             self.hashes.append(lite)
-        print(flush=True)
+        logger.info(flush=True)
         for i in empty_indices[::-1]:
             self.paths.pop(i)
         assert len(self.hashes) == len(self.paths)
